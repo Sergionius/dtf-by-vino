@@ -258,7 +258,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
               decoration: glassCardDecoration(),
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(AppRadius.card),
-                child: Column(
+                child: Material(
+                  type: MaterialType.transparency,
+                  child: Column(
                 children: [
                   ...menuItems.map((item) => ListTile(
                         leading: Icon(item[0] as IconData,
@@ -272,6 +274,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       )),
                 ],
                 ),  // Column
+                ),  // Material
               ),    // ClipRRect
             ),
             const SizedBox(height: 8),
@@ -280,7 +283,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
               decoration: glassCardDecoration(),
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(AppRadius.card),
-                child: Column(
+                child: Material(
+                  type: MaterialType.transparency,
+                  child: Column(
                 children: [
                   ListTile(
                     leading: const Icon(Icons.settings_outlined,
@@ -324,6 +329,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ),
                 ],
                 ),  // Column
+                ),  // Material
               ),    // ClipRRect
             ),
             const SizedBox(height: 16),

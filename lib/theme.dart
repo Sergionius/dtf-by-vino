@@ -190,7 +190,10 @@ class GlassCard extends StatelessWidget {
       decoration: glassCardDecoration(isViewed: isViewed),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(AppRadius.card),
-        child: child,
+        child: Material(
+          type: MaterialType.transparency,
+          child: child,
+        ),
       ),
     );
   }

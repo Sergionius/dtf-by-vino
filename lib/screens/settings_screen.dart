@@ -87,7 +87,10 @@ class SettingsScreen extends StatelessWidget {
           color: AppColors.bgCard,
           borderRadius: BorderRadius.circular(AppRadius.card),
         ),
-        child: child,
+        child: Material(
+          type: MaterialType.transparency,
+          child: child,
+        ),
       );
 
   Widget _toggle(String title, String subtitle, bool value,
