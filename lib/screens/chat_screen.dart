@@ -378,9 +378,9 @@ class _MessageBubble extends StatelessWidget {
               child: CachedNetworkImage(
                 imageUrl: OsnovaImage(uuid).preview(600),
                 fit: BoxFit.cover,
-                placeholder: (_, __) => Container(
+                placeholder: (_, _) => Container(
                     height: 160, color: AppColors.bgElevated),
-                errorWidget: (_, __, ___) => Container(
+                errorWidget: (_, _, _) => Container(
                     height: 160, color: AppColors.bgElevated),
               ),
             ),

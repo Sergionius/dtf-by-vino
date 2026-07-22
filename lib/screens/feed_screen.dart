@@ -188,9 +188,9 @@ class _NewsItem extends StatelessWidget {
                   height: 72,
                   fit: BoxFit.cover,
                   memCacheWidth: 200,
-                  placeholder: (_, __) =>
+                  placeholder: (_, _) =>
                       Container(width: 72, height: 72, color: AppColors.bgElevated),
-                  errorWidget: (_, __, ___) =>
+                  errorWidget: (_, _, _) =>
                       Container(width: 72, height: 72, color: AppColors.bgElevated),
                 ),
               ),

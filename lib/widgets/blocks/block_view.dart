@@ -311,9 +311,9 @@ class BlockView extends StatelessWidget {
                 width: 48,
                 height: 48,
                 fit: BoxFit.cover,
-                placeholder: (_, __) => Container(
+                placeholder: (_, _) => Container(
                     width: 48, height: 48, color: AppColors.bgElevated),
-                errorWidget: (_, __, ___) => Container(
+                errorWidget: (_, _, _) => Container(
                     width: 48, height: 48, color: AppColors.bgElevated),
               ),
             ),

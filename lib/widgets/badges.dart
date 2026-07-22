@@ -19,8 +19,8 @@ class BadgeIcon extends StatelessWidget {
       width: size,
       height: size,
       fit: BoxFit.contain,
-      placeholder: (_, __) => SizedBox(width: size, height: size),
-      errorWidget: (_, __, ___) => const SizedBox.shrink(),
+      placeholder: (_, _) => SizedBox(width: size, height: size),
+      errorWidget: (_, _, _) => const SizedBox.shrink(),
     );
   }
 }

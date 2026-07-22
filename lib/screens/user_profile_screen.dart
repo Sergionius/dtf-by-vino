@@ -190,7 +190,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> with SingleTicker
                           ? OsnovaImage(_subsite['cover']['data']['uuid']).gif()
                           : OsnovaImage(_subsite['cover']['data']['uuid']).scaleCrop(800, 300),
                       fit: BoxFit.cover,
-                      errorWidget: (_, __, ___) => Container(color: AppColors.bgElevated),
+                      errorWidget: (_, _, _) => Container(color: AppColors.bgElevated),
                     ),
                   )
                 : null,

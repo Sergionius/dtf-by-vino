@@ -46,8 +46,8 @@ class ReactionIcon extends StatelessWidget {
       width: size,
       height: size,
       fit: BoxFit.contain,
-      placeholder: (_, __) => SizedBox(width: size, height: size),
-      errorWidget: (_, __, ___) => SizedBox(
+      placeholder: (_, _) => SizedBox(width: size, height: size),
+      errorWidget: (_, _, _) => SizedBox(
         width: size, height: size,
         child: const Icon(Icons.emoji_emotions_outlined, size: 14, color: Colors.grey),
       ),
@@ -307,7 +307,7 @@ class _BurstTapState extends State<BurstTap>
                   height: 72,
                   child: AnimatedBuilder(
                     animation: _burst,
-                    builder: (_, __) {
+                    builder: (_, _) {
                       if (_burst.value == 0) return const SizedBox.shrink();
                       return CustomPaint(
                         painter: _BurstPainter(

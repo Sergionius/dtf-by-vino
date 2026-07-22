@@ -41,8 +41,8 @@ class Avatar extends StatelessWidget {
           width: size,
           height: size,
           fit: BoxFit.cover,
-          placeholder: (_, __) => _placeholder(),
-          errorWidget: (_, __, ___) => _placeholder(),
+          placeholder: (_, _) => _placeholder(),
+          errorWidget: (_, _, _) => _placeholder(),
         ),
       );
     }
@@ -113,7 +113,7 @@ class _VideoAvatarState extends State<_VideoAvatar> {
         height: widget.size,
         fit: BoxFit.cover,
         gaplessPlayback: true,
-        errorBuilder: (_, __, ___) => _fallback(),
+        errorBuilder: (_, _, _) => _fallback(),
       );
     }
     return SizedBox(

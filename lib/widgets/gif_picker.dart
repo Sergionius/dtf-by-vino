@@ -141,8 +141,8 @@ class _GifPickerSheetState extends State<_GifPickerSheet> {
                               child: CachedNetworkImage(
                                 imageUrl: gif.previewUrl,
                                 fit: BoxFit.cover,
-                                placeholder: (_, __) => Container(color: AppColors.bgElevated),
-                                errorWidget: (_, __, ___) => Container(
+                                placeholder: (_, _) => Container(color: AppColors.bgElevated),
+                                errorWidget: (_, _, _) => Container(
                                   color: AppColors.bgElevated,
                                   child: const Icon(Icons.gif_box_outlined, color: Colors.grey),
                                 ),

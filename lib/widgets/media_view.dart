@@ -117,8 +117,8 @@ class MediaView extends StatelessWidget {
           fit: BoxFit.cover,
           width: double.infinity,
           memCacheWidth: 700,
-          placeholder: (_, __) => Container(color: AppColors.bgElevated),
-          errorWidget: (_, __, ___) => Container(
+          placeholder: (_, _) => Container(color: AppColors.bgElevated),
+          errorWidget: (_, _, _) => Container(
             color: AppColors.bgElevated,
             child: const Center(
               child: Icon(Icons.broken_image, color: Colors.grey),
@@ -275,8 +275,8 @@ class _VideoPoster extends StatelessWidget {
           width: double.infinity,
           height: double.infinity,
           memCacheWidth: 700,
-          placeholder: (_, __) => Container(color: AppColors.bgElevated),
-          errorWidget: (_, __, ___) => Container(color: AppColors.bgElevated),
+          placeholder: (_, _) => Container(color: AppColors.bgElevated),
+          errorWidget: (_, _, _) => Container(color: AppColors.bgElevated),
         ),
         if (showPlayIcon)
           Container(
@@ -309,8 +309,8 @@ class _FullscreenImage extends StatelessWidget {
           child: CachedNetworkImage(
             imageUrl: url,
             fit: BoxFit.contain,
-            placeholder: (_, __) => const CircularProgressIndicator(),
-            errorWidget: (_, __, ___) => const Icon(Icons.broken_image, color: Colors.grey, size: 48),
+            placeholder: (_, _) => const CircularProgressIndicator(),
+            errorWidget: (_, _, _) => const Icon(Icons.broken_image, color: Colors.grey, size: 48),
           ),
         ),
       ),
@@ -452,7 +452,7 @@ class _FullscreenVideoState extends State<_FullscreenVideo> {
                     ),
                     ValueListenableBuilder<VideoPlayerValue>(
                       valueListenable: _controller!,
-                      builder: (_, v, __) => Padding(
+                      builder: (_, v, _) => Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -524,8 +524,8 @@ class _ExternalVideoCard extends StatelessWidget {
               width: double.infinity,
               height: double.infinity,
               memCacheWidth: 700,
-              placeholder: (_, __) => Container(color: AppColors.bgElevated),
-              errorWidget: (_, __, ___) => Container(color: AppColors.bgElevated),
+              placeholder: (_, _) => Container(color: AppColors.bgElevated),
+              errorWidget: (_, _, _) => Container(color: AppColors.bgElevated),
             ),
             Container(
               decoration: const BoxDecoration(color: Colors.black26, shape: BoxShape.circle),

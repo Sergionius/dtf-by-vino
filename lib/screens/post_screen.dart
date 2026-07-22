@@ -207,6 +207,7 @@ class _PostScreenState extends State<PostScreen> {
       // If the target comment is already built, centre it and we're done.
       final targetCtx = wantTarget ? _targetCommentKey.currentContext : null;
       if (targetCtx != null) {
+        if (!targetCtx.mounted) return;
         await Scrollable.ensureVisible(targetCtx,
             duration: const Duration(milliseconds: 350),
             curve: Curves.easeOut,
@@ -220,6 +221,7 @@ class _PostScreenState extends State<PostScreen> {
       // for 3s then snap back to the comments start" behaviour).
       final headerCtx = _commentsKey.currentContext;
       if (headerCtx != null) {
+        if (!headerCtx.mounted) return;
         await Scrollable.ensureVisible(headerCtx,
             duration: const Duration(milliseconds: 250),
             curve: Curves.easeOut,
@@ -231,6 +233,7 @@ class _PostScreenState extends State<PostScreen> {
           await Future.delayed(const Duration(milliseconds: 50));
           final tc = _targetCommentKey.currentContext;
           if (tc != null) {
+            if (!tc.mounted) return;
             await Scrollable.ensureVisible(tc,
                 duration: const Duration(milliseconds: 300),
                 curve: Curves.easeOut,
@@ -984,8 +987,8 @@ class _PostScreenState extends State<PostScreen> {
                               child: CachedNetworkImage(
                                 imageUrl: OsnovaImage(uuid).preview(120),
                                 width: 64, height: 64, fit: BoxFit.cover,
-                                placeholder: (_, __) => Container(width: 64, height: 64, color: AppColors.bgElevated),
-                                errorWidget: (_, __, ___) => Container(
+                                placeholder: (_, _) => Container(width: 64, height: 64, color: AppColors.bgElevated),
+                                errorWidget: (_, _, _) => Container(
                                   width: 64, height: 64, color: AppColors.bgElevated,
                                   child: const Icon(Icons.image, color: Colors.grey, size: 20),
                                 ),

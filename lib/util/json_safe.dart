@@ -1,6 +1,7 @@
 /// Defensive JSON helpers. The API can change field types or nesting; these
 /// never throw — they coerce or return a safe default so the UI degrades
 /// gracefully instead of crashing.
+library;
 
 int? asInt(dynamic v) {
   if (v is int) return v;
