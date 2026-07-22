@@ -4,6 +4,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:video_player/video_player.dart';
 import '../theme.dart';
 import '../util/external_link.dart';
+import '../util/gif_video_controller.dart';
 import '../util/json_safe.dart';
 import '../util/osnova_image.dart';
 
@@ -231,10 +232,14 @@ class _InlineGifVideoState extends State<_InlineGifVideo> {
 
   Future<void> _init() async {
     _mediaLog(widget.url, 'video-backed GIF init started');
-    final controller =
-        VideoPlayerController.networkUrl(Uri.parse(widget.url));
-    _controller = controller;
+    VideoPlayerController? controller;
     try {
+      controller = await createGifVideoController(widget.url);
+      if (!mounted) {
+        await controller.dispose();
+        return;
+      }
+      _controller = controller;
       await controller.initialize();
       _mediaLog(
         widget.url,
@@ -254,18 +259,19 @@ class _InlineGifVideoState extends State<_InlineGifVideo> {
         'volume=${controller.value.volume}',
       );
       if (mounted) setState(() => _ready = true);
+      final activeController = controller;
       Future.delayed(const Duration(milliseconds: 500), () {
-        if (!mounted || controller != _controller) return;
+        if (!mounted || activeController != _controller) return;
         _mediaLog(
           widget.url,
-          'playback check isPlaying=${controller.value.isPlaying} '
-          'position=${controller.value.position} '
-          'error=${controller.value.errorDescription}',
+          'playback check isPlaying=${activeController.value.isPlaying} '
+          'position=${activeController.value.position} '
+          'error=${activeController.value.errorDescription}',
         );
       });
     } catch (error, stackTrace) {
       _mediaLog(widget.url, 'video-backed GIF failed: $error\n$stackTrace');
-      if (mounted && controller == _controller) {
+      if (mounted && (controller == null || controller == _controller)) {
         setState(() => _failed = true);
       }
     }
