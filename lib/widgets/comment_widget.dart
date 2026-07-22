@@ -378,7 +378,9 @@ class _CommentWidgetState extends State<CommentWidget> {
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               ReactionIcon(
-                                  id: r['id'] as int, size: 14),
+                                  id: r['id'] as int,
+                                  size: 14,
+                                  animated: false),
                               const SizedBox(width: 3),
                               Text('${r['count']}',
                                   style:

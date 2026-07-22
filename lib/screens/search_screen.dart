@@ -135,6 +135,7 @@ class _SearchScreenState extends State<SearchScreen> {
         itemBuilder: (_, i) {
           final post = _results[i];
           return PostCard(
+            key: ValueKey(post['id']),
             post: post,
             onTap: () => Navigator.push(
               context,

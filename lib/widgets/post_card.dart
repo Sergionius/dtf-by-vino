@@ -357,7 +357,9 @@ class _PostCardState extends State<PostCard> {
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
                                     ReactionIcon(
-                                        id: r['id'] as int, size: 16),
+                                        id: r['id'] as int,
+                                        size: 16,
+                                        animated: false),
                                     const SizedBox(width: 4),
                                     Text('${r['count']}',
                                         style: const TextStyle(

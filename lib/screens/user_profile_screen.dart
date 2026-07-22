@@ -392,6 +392,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> with SingleTicker
                         }
                         final post = _posts[i];
                         return PostCard(
+                          key: ValueKey(post['id']),
                           post: post,
                           onTap: () => Navigator.push(
                             ctx,

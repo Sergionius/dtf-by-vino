@@ -714,7 +714,11 @@ class _PostScreenState extends State<PostScreen> {
                       mine ? Border.all(color: accent, width: 1.5) : null,
                 ),
                 child: Row(mainAxisSize: MainAxisSize.min, children: [
-                  ReactionIcon(id: r['id'] as int, size: 18),
+                  ReactionIcon(
+                    id: r['id'] as int,
+                    size: 18,
+                    animated: false,
+                  ),
                   const SizedBox(width: 6),
                   Text('${r['count']}',
                       style: const TextStyle(

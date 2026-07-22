@@ -61,6 +61,7 @@ class _DraftsScreenState extends State<DraftsScreen> {
                     itemBuilder: (ctx, i) {
                       final post = _items[i];
                       return PostCard(
+                        key: ValueKey(post['id']),
                         post: post,
                         onTap: () => Navigator.push(
                           ctx,

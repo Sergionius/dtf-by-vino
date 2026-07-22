@@ -148,11 +148,15 @@ class _BookmarksListState extends State<_BookmarksList> with AutomaticKeepAliveC
                           ),
                         )
                     : null,
-                child: CommentWidget(comment: data),
+                child: CommentWidget(
+                  key: ValueKey(data['id']),
+                  comment: data,
+                ),
               ),
             );
           }
           return PostCard(
+            key: ValueKey(data['id']),
             post: data,
             onTap: () => Navigator.push(
               ctx,

@@ -373,6 +373,7 @@ class FeedListState extends State<FeedList> with AutomaticKeepAliveClientMixin {
                     }
                     final post = _posts[postIdx];
                     return PostCard(
+                      key: ValueKey(post['id']),
                       post: post,
                       onTap: () => Navigator.push(
                         ctx,
