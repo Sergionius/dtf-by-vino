@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:video_player/video_player.dart';
@@ -7,10 +6,6 @@ import '../util/external_link.dart';
 import '../util/gif_video_controller.dart';
 import '../util/json_safe.dart';
 import '../util/osnova_image.dart';
-
-void _mediaLog(String id, String message) {
-  if (kDebugMode) debugPrint('[MediaView][$id] $message');
-}
 
 /// Renders a single Osnova media object: `{type, data: {uuid, width, height,
 /// type, isVideo, has_audio}}`. Videos use a static poster and open on tap;
@@ -48,32 +43,12 @@ class MediaView extends StatelessWidget {
     final aspect = (width > 0 && height > 0) ? width / height : 16 / 9;
     final cdn = OsnovaImage(uuid);
 
-    if (isGifFile || isMovieFile || hasAudio || data['isVideo'] == true) {
-      final category = isVideoBackedGif
-          ? 'video-backed-gif'
-          : hasAudio || isMovieFile
-              ? 'video-poster'
-              : isGifFile
-                  ? 'image-gif'
-                  : 'static-image';
-      _mediaLog(
-        uuid,
-        'classify category=$category outerType=$outerType '
-        'fileType=$fileType isVideo=${data['isVideo']} '
-        'hasAudio=$hasAudio duration=${data['duration']} size=${data['size']} '
-        'rawUrl=${cdn.videoUrl()} mp4Url=${cdn.mp4()} gifUrl=${cdn.gif()}',
-      );
-    }
-
     if (isVideoBackedGif) {
       return _ConstrainedMedia(
         aspect: aspect,
         maxHeight: maxHeight,
         child: GestureDetector(
-          onTap: () {
-            _mediaLog(uuid, 'tap video-backed GIF -> fullscreen MP4');
-            _openFullscreenVideo(context, cdn.mp4());
-          },
+          onTap: () => _openFullscreenVideo(context, cdn.mp4()),
           child: Stack(
             alignment: Alignment.topLeft,
             children: [
@@ -93,10 +68,7 @@ class MediaView extends StatelessWidget {
         aspect: aspect,
         maxHeight: maxHeight,
         child: GestureDetector(
-          onTap: () {
-            _mediaLog(uuid, 'tap video poster -> fullscreen video');
-            _openFullscreenVideo(context, cdn.videoUrl());
-          },
+          onTap: () => _openFullscreenVideo(context, cdn.videoUrl()),
           child: _VideoPoster(previewUrl: cdn.preview(640)),
         ),
       );
@@ -107,10 +79,7 @@ class MediaView extends StatelessWidget {
         aspect: aspect,
         maxHeight: maxHeight,
         child: GestureDetector(
-          onTap: () {
-            _mediaLog(uuid, 'tap image GIF -> fullscreen GIF');
-            _openFullscreenGif(context, cdn.gif());
-          },
+          onTap: () => _openFullscreenGif(context, cdn.gif()),
           child: Stack(
             alignment: Alignment.topLeft,
             children: [
@@ -124,15 +93,12 @@ class MediaView extends StatelessWidget {
                 loadingBuilder: (_, child, progress) => progress == null
                     ? child
                     : Container(color: AppColors.bgElevated),
-                errorBuilder: (_, error, stackTrace) {
-                  _mediaLog(uuid, 'GIF decode failed: $error\n$stackTrace');
-                  return Container(
-                    color: AppColors.bgElevated,
-                    child: const Center(
-                      child: Icon(Icons.gif_box_outlined, color: Colors.grey),
-                    ),
-                  );
-                },
+                errorBuilder: (_, _, _) => Container(
+                  color: AppColors.bgElevated,
+                  child: const Center(
+                    child: Icon(Icons.gif_box_outlined, color: Colors.grey),
+                  ),
+                ),
               ),
               _badge('GIF'),
             ],
@@ -248,7 +214,6 @@ class _InlineGifVideoState extends State<_InlineGifVideo> {
   }
 
   Future<void> _init() async {
-    _mediaLog(widget.url, 'video-backed GIF init started');
     VideoPlayerController? controller;
     try {
       controller = await createHostedVideoController(widget.url);
@@ -258,11 +223,6 @@ class _InlineGifVideoState extends State<_InlineGifVideo> {
       }
       _controller = controller;
       await controller.initialize();
-      _mediaLog(
-        widget.url,
-        'initialized duration=${controller.value.duration} '
-        'size=${controller.value.size} error=${controller.value.errorDescription}',
-      );
       if (!mounted || controller != _controller) {
         await controller.dispose();
         return;
@@ -270,25 +230,8 @@ class _InlineGifVideoState extends State<_InlineGifVideo> {
       await controller.setLooping(true);
       await controller.setVolume(0);
       await controller.play();
-      _mediaLog(
-        widget.url,
-        'play requested isPlaying=${controller.value.isPlaying} '
-        'volume=${controller.value.volume}',
-      );
       if (mounted) setState(() => _ready = true);
-      final activeController = controller;
-      Future.delayed(const Duration(milliseconds: 500), () {
-        if (!mounted || activeController != _controller) return;
-        _mediaLog(
-          widget.url,
-          'playback check isPlaying=${activeController.value.isPlaying} '
-          'position=${activeController.value.position} '
-          'error=${activeController.value.errorDescription}',
-        );
-      });
-    } catch (error, stackTrace) {
-      _mediaLog(widget.url, 'video-backed GIF failed: $error\n$stackTrace');
-      if (mounted && (controller == null || controller == _controller)) {
+    } catch (_) {      if (mounted && (controller == null || controller == _controller)) {
         setState(() => _failed = true);
       }
     }
@@ -296,7 +239,6 @@ class _InlineGifVideoState extends State<_InlineGifVideo> {
 
   @override
   void dispose() {
-    _mediaLog(widget.url, 'video-backed GIF disposed');
     _controller?.dispose();
     super.dispose();
   }
@@ -430,7 +372,6 @@ class _FullscreenVideoState extends State<_FullscreenVideo> {
   }
 
   Future<void> _init() async {
-    _mediaLog(widget.url, 'fullscreen video init started');
     VideoPlayerController? controller;
     try {
       controller = await createHostedVideoController(widget.url);
@@ -440,34 +381,11 @@ class _FullscreenVideoState extends State<_FullscreenVideo> {
       }
       _controller = controller;
       await controller.initialize();
-      _mediaLog(
-        widget.url,
-        'fullscreen initialized duration=${controller.value.duration} '
-        'size=${controller.value.size} error=${controller.value.errorDescription}',
-      );
       await controller.setLooping(true);
       await controller.setVolume(1);
       await controller.play();
-      _mediaLog(
-        widget.url,
-        'fullscreen play requested isPlaying=${controller.value.isPlaying} '
-        'volume=${controller.value.volume}',
-      );
       if (mounted) setState(() => _ready = true);
-      final activeController = controller;
-      Future.delayed(const Duration(milliseconds: 500), () {
-        if (!mounted || activeController != _controller) return;
-        _mediaLog(
-          widget.url,
-          'fullscreen playback check '
-          'isPlaying=${activeController.value.isPlaying} '
-          'position=${activeController.value.position} '
-          'error=${activeController.value.errorDescription}',
-        );
-      });
-    } catch (error, stackTrace) {
-      _mediaLog(widget.url, 'fullscreen video failed: $error\n$stackTrace');
-      if (mounted && (controller == null || controller == _controller)) {
+    } catch (_) {      if (mounted && (controller == null || controller == _controller)) {
         setState(() => _failed = true);
       }
     }
@@ -475,7 +393,6 @@ class _FullscreenVideoState extends State<_FullscreenVideo> {
 
   @override
   void dispose() {
-    _mediaLog(widget.url, 'fullscreen video disposed');
     _controller?.dispose();
     super.dispose();
   }
