@@ -15,21 +15,43 @@ class LinkifiedText extends StatefulWidget {
   State<LinkifiedText> createState() => _LinkifiedTextState();
 }
 
+class _LinkSegment {
+  final String text;
+  final String? url;
+  const _LinkSegment(this.text, [this.url]);
+}
+
 class _LinkifiedTextState extends State<LinkifiedText> {
   final List<TapGestureRecognizer> _recognizers = [];
+  List<_LinkSegment> _segments = const [];
 
   static final _anchorRe = RegExp(r'''<a\s[^>]*?href\s*=\s*["']([^"']+)["'][^>]*>(.*?)</a>''',
       caseSensitive: false, dotAll: true);
   static final _urlRe = RegExp(r'(https?://[^\s<]+|www\.[^\s<]+)', caseSensitive: false);
 
-  // link style is resolved from theme in build()
+  @override
+  void initState() {
+    super.initState();
+    _parse(widget.html);
+  }
+
+  @override
+  void didUpdateWidget(covariant LinkifiedText oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.html != widget.html) _parse(widget.html);
+  }
 
   @override
   void dispose() {
-    for (final r in _recognizers) {
-      r.dispose();
-    }
+    _disposeRecognizers();
     super.dispose();
+  }
+
+  void _disposeRecognizers() {
+    for (final recognizer in _recognizers) {
+      recognizer.dispose();
+    }
+    _recognizers.clear();
   }
 
   String _decode(String s) => s
@@ -48,52 +70,65 @@ class _LinkifiedTextState extends State<LinkifiedText> {
       .replaceAll('&raquo;', '»')
       .replaceAll('&mdash;', '—');
 
-  TapGestureRecognizer _recognizer(String url) {
-    final r = TapGestureRecognizer()..onTap = () => openExternalUrl(url);
-    _recognizers.add(r);
-    return r;
+  void _addPlainSegments(List<_LinkSegment> segments, String text) {
+    var last = 0;
+    for (final match in _urlRe.allMatches(text)) {
+      if (match.start > last) {
+        segments.add(_LinkSegment(text.substring(last, match.start)));
+      }
+      final url = match.group(0)!;
+      segments.add(_LinkSegment(url, url));
+      last = match.end;
+    }
+    if (last < text.length) segments.add(_LinkSegment(text.substring(last)));
   }
 
-  List<InlineSpan> _linkifyPlain(String text, TextStyle linkStyle) {
-    final spans = <InlineSpan>[];
-    int last = 0;
-    for (final m in _urlRe.allMatches(text)) {
-      if (m.start > last) {
-        spans.add(TextSpan(text: text.substring(last, m.start)));
+  void _parse(String html) {
+    _disposeRecognizers();
+    final segments = <_LinkSegment>[];
+    var last = 0;
+
+    for (final match in _anchorRe.allMatches(html)) {
+      if (match.start > last) {
+        _addPlainSegments(
+            segments, _decode(html.substring(last, match.start)));
       }
-      final url = m.group(0)!;
-      spans.add(TextSpan(
-          text: url, style: linkStyle, recognizer: _recognizer(url)));
-      last = m.end;
+      final href = match.group(1)!;
+      final label = _decode(match.group(2)!).trim();
+      segments.add(_LinkSegment(label.isEmpty ? href : label, href));
+      last = match.end;
     }
-    if (last < text.length) spans.add(TextSpan(text: text.substring(last)));
-    return spans;
+    if (last < html.length) {
+      _addPlainSegments(segments, _decode(html.substring(last)));
+    }
+
+    _segments = segments;
+    for (final segment in _segments) {
+      final url = segment.url;
+      if (url == null) continue;
+      _recognizers.add(
+        TapGestureRecognizer()..onTap = () => openExternalUrl(url),
+      );
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final linkStyle = TextStyle(
-        color: Theme.of(context).colorScheme.primary);
-    final html = widget.html;
+    final linkStyle = TextStyle(color: Theme.of(context).colorScheme.primary);
+    var recognizerIndex = 0;
     final spans = <InlineSpan>[];
-    int last = 0;
 
-    for (final m in _anchorRe.allMatches(html)) {
-      if (m.start > last) {
-        spans.addAll(_linkifyPlain(
-            _decode(html.substring(last, m.start)), linkStyle));
+    for (final segment in _segments) {
+      final url = segment.url;
+      if (url == null) {
+        spans.add(TextSpan(text: segment.text));
+      } else {
+        spans.add(TextSpan(
+          text: segment.text,
+          style: linkStyle,
+          recognizer: _recognizers[recognizerIndex++],
+        ));
       }
-      final href = m.group(1)!;
-      final label = _decode(m.group(2)!).trim();
-      spans.add(TextSpan(
-        text: label.isEmpty ? href : label,
-        style: linkStyle,
-        recognizer: _recognizer(href),
-      ));
-      last = m.end;
-    }
-    if (last < html.length) {
-      spans.addAll(_linkifyPlain(_decode(html.substring(last)), linkStyle));
     }
 
     return Text.rich(
