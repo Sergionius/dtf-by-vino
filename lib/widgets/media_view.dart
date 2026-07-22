@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:video_player/video_player.dart';
@@ -5,6 +6,10 @@ import '../theme.dart';
 import '../util/external_link.dart';
 import '../util/json_safe.dart';
 import '../util/osnova_image.dart';
+
+void _mediaLog(String id, String message) {
+  if (kDebugMode) debugPrint('[MediaView][$id] $message');
+}
 
 /// Renders a single Osnova media object: `{type, data: {uuid, width, height,
 /// type, isVideo, has_audio}}`. Videos use a static poster and open on tap;
@@ -41,6 +46,15 @@ class MediaView extends StatelessWidget {
     final height = (data['height'] as num?)?.toDouble() ?? 1;
     final aspect = (width > 0 && height > 0) ? width / height : 16 / 9;
     final cdn = OsnovaImage(uuid);
+
+    if (isGifFile || isMovieFile || hasAudio || data['isVideo'] == true) {
+      _mediaLog(
+        uuid,
+        'classify outerType=$outerType fileType=$fileType '
+        'isVideo=${data['isVideo']} hasAudio=$hasAudio '
+        'duration=${data['duration']} videoBackedGif=$isVideoBackedGif',
+      );
+    }
 
     if (isVideoBackedGif) {
       return _ConstrainedMedia(
@@ -92,12 +106,15 @@ class MediaView extends StatelessWidget {
                 loadingBuilder: (_, child, progress) => progress == null
                     ? child
                     : Container(color: AppColors.bgElevated),
-                errorBuilder: (_, _, _) => Container(
-                  color: AppColors.bgElevated,
-                  child: const Center(
-                    child: Icon(Icons.gif_box_outlined, color: Colors.grey),
-                  ),
-                ),
+                errorBuilder: (_, error, stackTrace) {
+                  _mediaLog(uuid, 'GIF decode failed: $error\n$stackTrace');
+                  return Container(
+                    color: AppColors.bgElevated,
+                    child: const Center(
+                      child: Icon(Icons.gif_box_outlined, color: Colors.grey),
+                    ),
+                  );
+                },
               ),
               _badge('GIF'),
             ],
@@ -213,11 +230,17 @@ class _InlineGifVideoState extends State<_InlineGifVideo> {
   }
 
   Future<void> _init() async {
+    _mediaLog(widget.url, 'video-backed GIF init started');
     final controller =
         VideoPlayerController.networkUrl(Uri.parse(widget.url));
     _controller = controller;
     try {
       await controller.initialize();
+      _mediaLog(
+        widget.url,
+        'initialized duration=${controller.value.duration} '
+        'size=${controller.value.size} error=${controller.value.errorDescription}',
+      );
       if (!mounted || controller != _controller) {
         await controller.dispose();
         return;
@@ -225,8 +248,23 @@ class _InlineGifVideoState extends State<_InlineGifVideo> {
       await controller.setLooping(true);
       await controller.setVolume(0);
       await controller.play();
+      _mediaLog(
+        widget.url,
+        'play requested isPlaying=${controller.value.isPlaying} '
+        'volume=${controller.value.volume}',
+      );
       if (mounted) setState(() => _ready = true);
-    } catch (_) {
+      Future.delayed(const Duration(milliseconds: 500), () {
+        if (!mounted || controller != _controller) return;
+        _mediaLog(
+          widget.url,
+          'playback check isPlaying=${controller.value.isPlaying} '
+          'position=${controller.value.position} '
+          'error=${controller.value.errorDescription}',
+        );
+      });
+    } catch (error, stackTrace) {
+      _mediaLog(widget.url, 'video-backed GIF failed: $error\n$stackTrace');
       if (mounted && controller == _controller) {
         setState(() => _failed = true);
       }
@@ -235,6 +273,7 @@ class _InlineGifVideoState extends State<_InlineGifVideo> {
 
   @override
   void dispose() {
+    _mediaLog(widget.url, 'video-backed GIF disposed');
     _controller?.dispose();
     super.dispose();
   }
