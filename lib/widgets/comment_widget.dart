@@ -18,6 +18,7 @@ class CommentWidget extends StatefulWidget {
   final VoidCallback? onReactionChanged;
   final VoidCallback? onToggleCollapse;
   final bool? branchCollapsed;
+  final int? depth;
 
   const CommentWidget({
     super.key,
@@ -26,6 +27,7 @@ class CommentWidget extends StatefulWidget {
     this.onReactionChanged,
     this.onToggleCollapse,
     this.branchCollapsed,
+    this.depth,
   });
 
   @override
@@ -137,7 +139,7 @@ class _CommentWidgetState extends State<CommentWidget> {
     final isRemovedByMod = c['isRemovedByModerator'] == true;
     final isHidden = c['isHiddenByBan'] == true;
     final author = c['author'];
-    final level = (c['level'] ?? 0) as int;
+    final level = widget.depth ?? (c['level'] ?? 0) as int;
     final authorId = author?['id'] as int?;
     final userNote = context.select<SettingsService, String?>(
         (s) => authorId != null ? s.userNotes[authorId] : null);

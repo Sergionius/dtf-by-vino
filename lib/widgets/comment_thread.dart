@@ -1,87 +1,161 @@
 import 'package:flutter/material.dart';
 import 'comment_widget.dart';
 
-/// Builds a threaded comment tree from a flat list. DTF's main /comments call
-/// only returns levels 0-1; deeper replies are fetched on demand by threadId.
-class CommentThread extends StatelessWidget {
-  final List<dynamic> comments;
-  final void Function(int commentId, String authorName)? onReply;
-  final VoidCallback? onReactionChanged;
-  // Called with a comment's threadId to load the rest of its branch.
-  final Future<void> Function(String threadId)? onLoadThread;
-  final Set<String> loadingThreadIds;
+/// A comment prepared for rendering as one lazy sliver child.
+class VisibleComment {
+  final dynamic comment;
+  final int depth;
+  final int loadedDescendantCount;
+  final bool hasChildren;
 
-  const CommentThread({
-    super.key,
-    required this.comments,
-    this.onReply,
-    this.onReactionChanged,
-    this.onLoadThread,
-    this.loadingThreadIds = const {},
+  const VisibleComment({
+    required this.comment,
+    required this.depth,
+    required this.loadedDescendantCount,
+    required this.hasChildren,
+  });
+}
+
+/// Precomputed tree metadata for a flat API comment list.
+///
+/// Building descendant counts once avoids the old recursive count from every
+/// rendered node, while [flatten] makes every visible comment its own sliver
+/// child instead of eagerly rendering a whole root branch in one Column.
+class CommentTreeIndex {
+  final List<dynamic> roots;
+  final Map<int, dynamic> byId;
+  final Map<int, List<dynamic>> childrenByParent;
+  final Map<int, int> descendantCounts;
+
+  const CommentTreeIndex._({
+    required this.roots,
+    required this.byId,
+    required this.childrenByParent,
+    required this.descendantCounts,
   });
 
-  /// Splits a flat comment list into root nodes and a children-by-parent map.
-  static ({List<dynamic> roots, Map<int, List<dynamic>> childrenByParent})
-      buildTree(List<dynamic> comments) {
-    final childrenByParent = <int, List<dynamic>>{};
+  factory CommentTreeIndex.fromComments(List<dynamic> comments) {
     final byId = <int, dynamic>{};
-    for (final c in comments) {
-      final id = c['id'] as int?;
-      if (id != null) byId[id] = c;
+    for (final comment in comments) {
+      final id = comment['id'] as int?;
+      if (id != null) byId[id] = comment;
     }
+
     final roots = <dynamic>[];
-    for (final c in comments) {
-      final replyTo = (c['replyTo'] ?? 0) as int;
+    final childrenByParent = <int, List<dynamic>>{};
+    for (final comment in comments) {
+      final replyTo = (comment['replyTo'] ?? 0) as int;
       if (replyTo == 0 || !byId.containsKey(replyTo)) {
-        roots.add(c);
+        roots.add(comment);
       } else {
-        (childrenByParent[replyTo] ??= []).add(c);
+        (childrenByParent[replyTo] ??= []).add(comment);
       }
     }
-    return (roots: roots, childrenByParent: childrenByParent);
+
+    final descendantCounts = <int, int>{};
+    final visiting = <int>{};
+
+    int countDescendants(int id) {
+      final cached = descendantCounts[id];
+      if (cached != null) return cached;
+      if (!visiting.add(id)) return 0;
+
+      var count = 0;
+      for (final child in childrenByParent[id] ?? const []) {
+        count++;
+        final childId = child['id'] as int?;
+        if (childId != null) count += countDescendants(childId);
+      }
+
+      visiting.remove(id);
+      descendantCounts[id] = count;
+      return count;
+    }
+
+    for (final id in byId.keys) {
+      countDescendants(id);
+    }
+
+    return CommentTreeIndex._(
+      roots: roots,
+      byId: byId,
+      childrenByParent: childrenByParent,
+      descendantCounts: descendantCounts,
+    );
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final tree = buildTree(comments);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: tree.roots
-          .map((c) => CommentNode(
-                comment: c,
-                childrenByParent: tree.childrenByParent,
-                depth: 0,
-                onReply: onReply,
-                onReactionChanged: onReactionChanged,
-                onLoadThread: onLoadThread,
-                loadingThreadIds: loadingThreadIds,
-              ))
-          .toList(),
-    );
+  List<VisibleComment> flatten({
+    Set<int> collapsedIds = const {},
+    int? promoteCommentId,
+  }) {
+    final orderedRoots = List<dynamic>.from(roots);
+    if (promoteCommentId != null) {
+      final rootId = _rootIdFor(promoteCommentId);
+      final index = orderedRoots.indexWhere((root) => root['id'] == rootId);
+      if (index > 0) orderedRoots.insert(0, orderedRoots.removeAt(index));
+    }
+
+    final visible = <VisibleComment>[];
+    final visited = <int>{};
+
+    void append(dynamic comment, int depth) {
+      final id = comment['id'] as int?;
+      if (id == null || !visited.add(id)) return;
+      final children = childrenByParent[id] ?? const [];
+      visible.add(
+        VisibleComment(
+          comment: comment,
+          depth: depth,
+          loadedDescendantCount: descendantCounts[id] ?? 0,
+          hasChildren: children.isNotEmpty,
+        ),
+      );
+      if (collapsedIds.contains(id)) return;
+      for (final child in children) {
+        append(child, depth + 1);
+      }
+    }
+
+    for (final root in orderedRoots) {
+      append(root, 0);
+    }
+    return visible;
+  }
+
+  int? _rootIdFor(int commentId) {
+    dynamic current = byId[commentId];
+    if (current == null) return null;
+
+    var guard = 0;
+    while ((current['replyTo'] ?? 0) != 0 && guard++ < 100) {
+      final parent = byId[current['replyTo']];
+      if (parent == null) break;
+      current = parent;
+    }
+    return current['id'] as int?;
   }
 }
 
-class CommentNode extends StatefulWidget {
-  final dynamic comment;
-  final Map<int, List<dynamic>> childrenByParent;
-  final int depth;
+/// One comment row in the lazy sliver, including its optional "show replies"
+/// action and target highlight.
+class CommentRow extends StatefulWidget {
+  final VisibleComment row;
   final void Function(int commentId, String authorName)? onReply;
   final VoidCallback? onReactionChanged;
+  final VoidCallback? onToggleCollapse;
+  final bool branchCollapsed;
   final Future<void> Function(String threadId)? onLoadThread;
   final Set<String> loadingThreadIds;
-  // When set, the comment with this id gets [highlightKey] (for scroll-to) and
-  // a brief highlight flash — used to jump straight to a comment from a
-  // notification or the search screen.
   final int? highlightCommentId;
   final GlobalKey? highlightKey;
 
-  const CommentNode({
+  const CommentRow({
     super.key,
-    required this.comment,
-    required this.childrenByParent,
-    required this.depth,
+    required this.row,
     this.onReply,
     this.onReactionChanged,
+    this.onToggleCollapse,
+    this.branchCollapsed = false,
     this.onLoadThread,
     required this.loadingThreadIds,
     this.highlightCommentId,
@@ -89,18 +163,18 @@ class CommentNode extends StatefulWidget {
   });
 
   @override
-  State<CommentNode> createState() => CommentNodeState();
+  State<CommentRow> createState() => _CommentRowState();
 }
 
-class CommentNodeState extends State<CommentNode> {
-  bool _branchCollapsed = false;
+class _CommentRowState extends State<CommentRow> {
   bool _highlight = false;
+
+  int get _id => widget.row.comment['id'] as int? ?? -1;
 
   @override
   void initState() {
     super.initState();
-    final id = widget.comment['id'] as int? ?? -1;
-    if (id == widget.highlightCommentId) {
+    if (_id == widget.highlightCommentId) {
       _highlight = true;
       Future.delayed(const Duration(milliseconds: 2600), () {
         if (mounted) setState(() => _highlight = false);
@@ -108,29 +182,16 @@ class CommentNodeState extends State<CommentNode> {
     }
   }
 
-  int _loadedDescendants(int id) {
-    final kids = widget.childrenByParent[id] ?? const [];
-    var n = kids.length;
-    for (final k in kids) {
-      n += _loadedDescendants(k['id'] as int? ?? -1);
-    }
-    return n;
-  }
-
   @override
   Widget build(BuildContext context) {
-    final id = widget.comment['id'] as int? ?? -1;
-    final children = widget.childrenByParent[id] ?? const [];
-    final hasChildren = children.isNotEmpty;
-    final replyCount = (widget.comment['replyCount'] ?? 0) as int;
-    final threadId = widget.comment['threadId']?.toString();
-
-    final loaded = _loadedDescendants(id);
+    final comment = widget.row.comment;
+    final threadId = comment['threadId']?.toString();
+    final replyCount = (comment['replyCount'] ?? 0) as int;
+    final missing = replyCount - widget.row.loadedDescendantCount;
+    final isLoading =
+        threadId != null && widget.loadingThreadIds.contains(threadId);
+    final isTarget = _id == widget.highlightCommentId;
     final accent = Theme.of(context).colorScheme.primary;
-    final missing = replyCount - loaded; // unloaded replies in this branch
-    final isLoading = threadId != null && widget.loadingThreadIds.contains(threadId);
-
-    final isTarget = id == widget.highlightCommentId;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -145,68 +206,79 @@ class CommentNodeState extends State<CommentNode> {
             borderRadius: BorderRadius.circular(10),
           ),
           child: CommentWidget(
-            comment: widget.comment,
+            key: ValueKey(_id),
+            comment: comment,
+            depth: widget.row.depth,
             onReactionChanged: widget.onReactionChanged,
             onReply: widget.onReply == null
                 ? null
-                : () => widget.onReply!(id, widget.comment['author']?['name'] ?? ''),
-            onToggleCollapse: hasChildren ? () => setState(() => _branchCollapsed = !_branchCollapsed) : null,
-            branchCollapsed: hasChildren ? _branchCollapsed : null,
+                : () => widget.onReply!(_id, comment['author']?['name'] ?? ''),
+            onToggleCollapse: widget.row.hasChildren
+                ? widget.onToggleCollapse
+                : null,
+            branchCollapsed: widget.row.hasChildren
+                ? widget.branchCollapsed
+                : null,
           ),
         ),
-
-        // Loaded children (unless this branch is collapsed)
-        if (hasChildren && !_branchCollapsed)
-          ...children.map((c) => CommentNode(
-                comment: c,
-                childrenByParent: widget.childrenByParent,
-                depth: widget.depth + 1,
-                onReply: widget.onReply,
-                onReactionChanged: widget.onReactionChanged,
-                onLoadThread: widget.onLoadThread,
-                loadingThreadIds: widget.loadingThreadIds,
-                highlightCommentId: widget.highlightCommentId,
-                highlightKey: widget.highlightKey,
-              )),
-
-        // "Show N replies" button to fetch the rest of the branch
-        if (!_branchCollapsed && missing > 0 && threadId != null && widget.onLoadThread != null)
+        if (!widget.branchCollapsed &&
+            missing > 0 &&
+            threadId != null &&
+            widget.onLoadThread != null)
           Padding(
-            padding: EdgeInsets.only(left: (widget.depth + 1) * 12.0 + 4, top: 2, bottom: 8),
+            padding: EdgeInsets.only(
+              left: (widget.row.depth + 1) * 12.0 + 4,
+              top: 2,
+              bottom: 8,
+            ),
             child: GestureDetector(
               onTap: isLoading ? null : () => widget.onLoadThread!(threadId),
-              child: Row(mainAxisSize: MainAxisSize.min, children: [
-                if (isLoading)
-                  SizedBox(
-                    width: 14, height: 14,
-                    child: CircularProgressIndicator(strokeWidth: 2, color: accent),
-                  )
-                else
-                  Icon(Icons.subdirectory_arrow_right, size: 15, color: accent),
-                const SizedBox(width: 5),
-                Text(
-                  isLoading ? 'Загрузка...' : _repliesLabel(missing),
-                  style: TextStyle(
-                      color: accent, fontSize: 13, fontWeight: FontWeight.w600),
-                ),
-              ]),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (isLoading)
+                    SizedBox(
+                      width: 14,
+                      height: 14,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: accent,
+                      ),
+                    )
+                  else
+                    Icon(
+                      Icons.subdirectory_arrow_right,
+                      size: 15,
+                      color: accent,
+                    ),
+                  const SizedBox(width: 5),
+                  Text(
+                    isLoading ? 'Загрузка...' : _repliesLabel(missing),
+                    style: TextStyle(
+                      color: accent,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
       ],
     );
   }
+}
 
-  String _repliesLabel(int n) {
-    final mod10 = n % 10;
-    final mod100 = n % 100;
-    String word;
-    if (mod10 == 1 && mod100 != 11) {
-      word = 'ответ';
-    } else if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)) {
-      word = 'ответа';
-    } else {
-      word = 'ответов';
-    }
-    return '$n $word';
+String _repliesLabel(int count) {
+  final mod10 = count % 10;
+  final mod100 = count % 100;
+  String word;
+  if (mod10 == 1 && mod100 != 11) {
+    word = 'ответ';
+  } else if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)) {
+    word = 'ответа';
+  } else {
+    word = 'ответов';
   }
+  return '$count $word';
 }

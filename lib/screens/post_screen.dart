@@ -40,6 +40,9 @@ class PostScreen extends StatefulWidget {
 class _PostScreenState extends State<PostScreen> {
   dynamic _post;
   List<dynamic> _comments = [];
+  CommentTreeIndex _commentTree = CommentTreeIndex.fromComments(const []);
+  List<VisibleComment> _visibleComments = const [];
+  final Set<int> _collapsedCommentIds = {};
   bool _loadingPost = true;
   bool _loadingComments = true;
   String _commentSort = 'hotness'; // 'hotness' (popular) | 'date' (new)
@@ -106,7 +109,11 @@ class _PostScreenState extends State<PostScreen> {
           sorting: _commentSort,
           count: widget.scrollToCommentId != null ? 500 : 200);
       if (!mounted) return;
-      setState(() { _comments = list; _loadingComments = false; });
+      setState(() {
+        _comments = list;
+        _rebuildCommentIndex();
+        _loadingComments = false;
+      });
       // Came from a notification, or tapped "comments" in the feed → jump down once.
       if ((widget.scrollToCommentId != null || widget.openToComments) && !_didScrollToComments) {
         _didScrollToComments = true;
@@ -265,6 +272,7 @@ class _PostScreenState extends State<PostScreen> {
       _mergeComments(branch);
       _loadingThreads.remove(threadId);
       _applyArchive(_comments); // restore any deleted comments in this branch
+      _rebuildCommentIndex();
     });
   }
 
@@ -285,6 +293,29 @@ class _PostScreenState extends State<PostScreen> {
       }
     }
     return added;
+  }
+
+  void _rebuildCommentIndex() {
+    _commentTree = CommentTreeIndex.fromComments(_comments);
+    _collapsedCommentIds.removeWhere(
+        (id) => !_commentTree.byId.containsKey(id));
+    _rebuildVisibleComments();
+  }
+
+  void _rebuildVisibleComments() {
+    _visibleComments = _commentTree.flatten(
+      collapsedIds: _collapsedCommentIds,
+      promoteCommentId: widget.scrollToCommentId,
+    );
+  }
+
+  void _toggleCommentBranch(int commentId) {
+    setState(() {
+      if (!_collapsedCommentIds.add(commentId)) {
+        _collapsedCommentIds.remove(commentId);
+      }
+      _rebuildVisibleComments();
+    });
   }
 
   // Threads already bulk-loaded while hunting for a notification's target
@@ -337,7 +368,7 @@ class _PostScreenState extends State<PostScreen> {
       }
       if (added) {
         _applyArchive(_comments);
-        setState(() {});
+        setState(_rebuildCommentIndex);
       }
       if (_comments.any((c) => c['id'] == targetId)) return true;
     }
@@ -839,58 +870,35 @@ class _PostScreenState extends State<PostScreen> {
         ),
       ];
     }
-    final tree = CommentThread.buildTree(_comments);
-    // When arriving from a notification / search, float the target comment's
-    // whole branch to the top so it renders immediately (a lazy SliverList
-    // wouldn't have built a deep-down comment yet, breaking scroll-to).
-    final roots = widget.scrollToCommentId != null
-        ? _promoteTargetRoot(tree.roots, widget.scrollToCommentId!)
-        : tree.roots;
     return [
       SliverPadding(
         padding: const EdgeInsets.symmetric(horizontal: 16),
         sliver: SliverList(
           delegate: SliverChildBuilderDelegate(
-            (ctx, i) => CommentNode(
-              comment: roots[i],
-              childrenByParent: tree.childrenByParent,
-              depth: 0,
-              onReply: (id, name) => _startReply(id, name),
-              onReactionChanged: _fetchComments,
-              onLoadThread: _loadThread,
-              loadingThreadIds: _loadingThreads,
-              highlightCommentId: widget.scrollToCommentId,
-              highlightKey: _targetCommentKey,
-            ),
-            childCount: roots.length,
+            (ctx, i) {
+              final row = _visibleComments[i];
+              final id = row.comment['id'] as int? ?? -1;
+              return CommentRow(
+                key: ValueKey(id),
+                row: row,
+                onReply: (commentId, name) =>
+                    _startReply(commentId, name),
+                onReactionChanged: _fetchComments,
+                onToggleCollapse: row.hasChildren
+                    ? () => _toggleCommentBranch(id)
+                    : null,
+                branchCollapsed: _collapsedCommentIds.contains(id),
+                onLoadThread: _loadThread,
+                loadingThreadIds: _loadingThreads,
+                highlightCommentId: widget.scrollToCommentId,
+                highlightKey: _targetCommentKey,
+              );
+            },
+            childCount: _visibleComments.length,
           ),
         ),
       ),
     ];
-  }
-
-  /// Returns [roots] with the target comment's root ancestor moved to the front.
-  List<dynamic> _promoteTargetRoot(List<dynamic> roots, int targetId) {
-    final byId = {
-      for (final c in _comments)
-        if (c['id'] is int) c['id'] as int: c
-    };
-    dynamic cur = byId[targetId];
-    if (cur == null) return roots;
-    // Walk up to the root ancestor.
-    var guard = 0;
-    while (cur != null &&
-        (cur['replyTo'] ?? 0) != 0 &&
-        byId[cur['replyTo']] != null &&
-        guard++ < 100) {
-      cur = byId[cur['replyTo']];
-    }
-    final rootId = cur?['id'];
-    final idx = roots.indexWhere((r) => r['id'] == rootId);
-    if (idx <= 0) return roots; // already first, or not found
-    final reordered = List<dynamic>.from(roots);
-    reordered.insert(0, reordered.removeAt(idx));
-    return reordered;
   }
 
   Widget _commentSortChip(String label, String value) {
