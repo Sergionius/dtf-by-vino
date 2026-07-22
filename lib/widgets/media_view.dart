@@ -7,16 +7,8 @@ import '../util/json_safe.dart';
 import '../util/osnova_image.dart';
 
 /// Renders a single Osnova media object: `{type, data: {uuid, width, height,
-/// type, isVideo, has_audio}}`. Posts and comments use slightly different
-/// shapes for the same kind of content (confirmed via live API, 2026-06-29):
-/// - Post media: outer `type` is always "image"; the real signal is
-///   `data.type` ('png'/'gif'/...) + `data.isVideo` + `data.has_audio`.
-/// - Comment media: outer `type` is 'image'/'movie'/'video'/'link'. Movie
-///   clips ('movie'/'mp4') have NO `isVideo` field at all. External embeds
-///   (outer 'video', e.g. YouTube) have no direct `uuid` — only a thumbnail.
-/// `has_audio: true` always wins regardless of type/isVideo — that's the
-/// one combination DTF's own metadata is inconsistent about (a "gif" can
-/// have audio and needs a real player, not a muted looping image).
+/// type, isVideo, has_audio}}`. Videos use a static poster and open on tap;
+/// real GIF files animate inline through the network image codec.
 class MediaView extends StatelessWidget {
   final dynamic media;
   final double maxHeight;
@@ -28,7 +20,6 @@ class MediaView extends StatelessWidget {
     final outerType = media is Map ? media['type']?.toString() : null;
     final data = media is Map ? media['data'] : null;
 
-    // External embed (e.g. YouTube) — no DTF-hosted uuid, just a thumbnail.
     if (outerType == 'video' && data is Map && data['uuid'] == null) {
       return _ExternalVideoCard(data: data, maxHeight: maxHeight);
     }
@@ -40,27 +31,48 @@ class MediaView extends StatelessWidget {
     final hasAudio = data['has_audio'] == true;
     final isMovieFile = outerType == 'movie' || fileType == 'mp4';
     final isGifFile = fileType == 'gif';
+    // DTF stores many user-visible GIFs as silent MP4 files. Asking the CDN
+    // for `format/gif` returns only one static frame for these objects.
+    final isVideoBackedGif = isGifFile &&
+        data['isVideo'] == true &&
+        !hasAudio &&
+        outerType != 'movie';
     final width = (data['width'] as num?)?.toDouble() ?? 1;
     final height = (data['height'] as num?)?.toDouble() ?? 1;
     final aspect = (width > 0 && height > 0) ? width / height : 16 / 9;
     final cdn = OsnovaImage(uuid);
 
-    // Has sound, or a real movie file → a proper video, not a muted loop.
-    // Tap opens the fullscreen player (sound starts there, not inline).
+    if (isVideoBackedGif) {
+      return _ConstrainedMedia(
+        aspect: aspect,
+        maxHeight: maxHeight,
+        child: GestureDetector(
+          onTap: () => _openFullscreenVideo(context, cdn.mp4()),
+          child: Stack(
+            alignment: Alignment.topLeft,
+            children: [
+              _InlineGifVideo(
+                url: cdn.mp4(),
+                previewUrl: cdn.preview(640),
+              ),
+              _badge('GIF'),
+            ],
+          ),
+        ),
+      );
+    }
+
     if (hasAudio || isMovieFile) {
       return _ConstrainedMedia(
         aspect: aspect,
         maxHeight: maxHeight,
         child: GestureDetector(
           onTap: () => _openFullscreenVideo(context, cdn.videoUrl()),
-          child: hasAudio
-              ? _VideoPoster(previewUrl: cdn.preview(640))
-              : _InlineLoop(url: cdn.videoUrl()),
+          child: _VideoPoster(previewUrl: cdn.preview(640)),
         ),
       );
     }
 
-    // Silent GIF → animated image (cheaper than a video controller).
     if (isGifFile) {
       return _ConstrainedMedia(
         aspect: aspect,
@@ -70,20 +82,21 @@ class MediaView extends StatelessWidget {
           child: Stack(
             alignment: Alignment.topLeft,
             children: [
-              // Image.network (not CachedNetworkImage) is required here:
-              // cached_network_image saves GIFs to disk via flutter_cache_manager,
-              // which can strip animation during file storage/retrieval. Image.network
-              // decodes bytes directly from the network codec, preserving all frames.
+              // Decode directly from network bytes. The cache-manager path can
+              // collapse animated GIFs to a static frame on some platforms.
               Image.network(
                 cdn.gif(),
                 fit: BoxFit.cover,
                 width: double.infinity,
                 gaplessPlayback: true,
-                loadingBuilder: (_, child, progress) =>
-                    progress == null ? child : Container(color: AppColors.bgElevated),
-                errorBuilder: (_, __, ___) => Container(
+                loadingBuilder: (_, child, progress) => progress == null
+                    ? child
+                    : Container(color: AppColors.bgElevated),
+                errorBuilder: (_, _, _) => Container(
                   color: AppColors.bgElevated,
-                  child: const Center(child: Icon(Icons.gif_box_outlined, color: Colors.grey)),
+                  child: const Center(
+                    child: Icon(Icons.gif_box_outlined, color: Colors.grey),
+                  ),
                 ),
               ),
               _badge('GIF'),
@@ -93,7 +106,6 @@ class MediaView extends StatelessWidget {
       );
     }
 
-    // Static image (cached on disk).
     return _ConstrainedMedia(
       aspect: aspect,
       maxHeight: maxHeight,
@@ -107,7 +119,9 @@ class MediaView extends StatelessWidget {
           placeholder: (_, __) => Container(color: AppColors.bgElevated),
           errorWidget: (_, __, ___) => Container(
             color: AppColors.bgElevated,
-            child: const Center(child: Icon(Icons.broken_image, color: Colors.grey)),
+            child: const Center(
+              child: Icon(Icons.broken_image, color: Colors.grey),
+            ),
           ),
         ),
       ),
@@ -175,18 +189,19 @@ class _ConstrainedMedia extends StatelessWidget {
   }
 }
 
-/// Silent auto-looping video (real mp4 clip, or a "gif" with no audio that
-/// DTF only serves as mp4). No tap handling of its own — the parent
-/// GestureDetector owns the tap, this just plays muted in a loop.
-class _InlineLoop extends StatefulWidget {
+/// DTF's uploader stores many GIFs as silent MP4 files (`isVideo: true`).
+/// They still behave as GIFs in the UI: muted, looping and autoplaying.
+class _InlineGifVideo extends StatefulWidget {
   final String url;
-  const _InlineLoop({required this.url});
+  final String previewUrl;
+
+  const _InlineGifVideo({required this.url, required this.previewUrl});
 
   @override
-  State<_InlineLoop> createState() => _InlineLoopState();
+  State<_InlineGifVideo> createState() => _InlineGifVideoState();
 }
 
-class _InlineLoopState extends State<_InlineLoop> {
+class _InlineGifVideoState extends State<_InlineGifVideo> {
   VideoPlayerController? _controller;
   bool _ready = false;
   bool _failed = false;
@@ -198,17 +213,23 @@ class _InlineLoopState extends State<_InlineLoop> {
   }
 
   Future<void> _init() async {
+    final controller =
+        VideoPlayerController.networkUrl(Uri.parse(widget.url));
+    _controller = controller;
     try {
-      final c = VideoPlayerController.networkUrl(Uri.parse(widget.url));
-      _controller = c;
-      await c.initialize();
-      if (!mounted) { c.dispose(); return; }
-      c.setLooping(true);
-      c.setVolume(0);
-      c.play();
-      setState(() => _ready = true);
+      await controller.initialize();
+      if (!mounted || controller != _controller) {
+        await controller.dispose();
+        return;
+      }
+      await controller.setLooping(true);
+      await controller.setVolume(0);
+      await controller.play();
+      if (mounted) setState(() => _ready = true);
     } catch (_) {
-      if (mounted) setState(() => _failed = true);
+      if (mounted && controller == _controller) {
+        setState(() => _failed = true);
+      }
     }
   }
 
@@ -220,16 +241,10 @@ class _InlineLoopState extends State<_InlineLoop> {
 
   @override
   Widget build(BuildContext context) {
-    if (_failed) {
-      return Container(
-        color: AppColors.bgElevated,
-        child: const Center(child: Icon(Icons.videocam_off, color: Colors.grey)),
-      );
-    }
-    if (!_ready || _controller == null) {
-      return Container(
-        color: AppColors.bgElevated,
-        child: const Center(child: CircularProgressIndicator(strokeWidth: 2)),
+    if (_failed || !_ready || _controller == null) {
+      return _VideoPoster(
+        previewUrl: widget.previewUrl,
+        showPlayIcon: false,
       );
     }
     return VideoPlayer(_controller!);
@@ -241,7 +256,9 @@ class _InlineLoopState extends State<_InlineLoop> {
 /// fullscreen player where it actually plays, with sound.
 class _VideoPoster extends StatelessWidget {
   final String previewUrl;
-  const _VideoPoster({required this.previewUrl});
+  final bool showPlayIcon;
+
+  const _VideoPoster({required this.previewUrl, this.showPlayIcon = true});
 
   @override
   Widget build(BuildContext context) {
@@ -257,11 +274,13 @@ class _VideoPoster extends StatelessWidget {
           placeholder: (_, __) => Container(color: AppColors.bgElevated),
           errorWidget: (_, __, ___) => Container(color: AppColors.bgElevated),
         ),
-        Container(
-          decoration: const BoxDecoration(color: Colors.black26, shape: BoxShape.circle),
-          padding: const EdgeInsets.all(4),
-          child: const Icon(Icons.play_arrow, color: Colors.white, size: 40),
-        ),
+        if (showPlayIcon)
+          Container(
+            decoration: const BoxDecoration(
+                color: Colors.black26, shape: BoxShape.circle),
+            padding: const EdgeInsets.all(4),
+            child: const Icon(Icons.play_arrow, color: Colors.white, size: 40),
+          ),
       ],
     );
   }
@@ -308,11 +327,18 @@ class _FullscreenGif extends StatelessWidget {
         iconTheme: const IconThemeData(color: Colors.white),
       ),
       body: Center(
-        child: CachedNetworkImage(
-          imageUrl: url,
+        child: Image.network(
+          url,
           fit: BoxFit.contain,
-          placeholder: (_, __) => const CircularProgressIndicator(),
-          errorWidget: (_, __, ___) => const Icon(Icons.broken_image, color: Colors.grey, size: 48),
+          gaplessPlayback: true,
+          loadingBuilder: (_, child, progress) => progress == null
+              ? child
+              : const CircularProgressIndicator(),
+          errorBuilder: (_, _, _) => const Icon(
+            Icons.broken_image,
+            color: Colors.grey,
+            size: 48,
+          ),
         ),
       ),
     );
