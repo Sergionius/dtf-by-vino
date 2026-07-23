@@ -39,10 +39,18 @@ class DtfApi {
   // --- Core HTTP layer — these NEVER throw and always time out ---
 
   /// GET that returns `result` (decoded) or null on any failure. Never throws.
-  static Future<dynamic> _get(String path, SettingsService settings, {String version = ApiConfig.vDefault}) async {
+  static Future<dynamic> _get(
+    String path,
+    SettingsService settings, {
+    String version = ApiConfig.vDefault,
+    bool useDevWebProxy = false,
+  }) async {
     try {
       final res = await http
-          .get(ApiConfig.url(path, version: version), headers: _headers(settings))
+          .get(
+            ApiConfig.url(path, version: version, useDevWebProxy: useDevWebProxy),
+            headers: _headers(settings),
+          )
           .timeout(ApiConfig.timeout);
       if (res.statusCode == 200) {
         final body = jsonDecode(res.body);
@@ -183,7 +191,7 @@ class DtfApi {
     String path = 'search/posts?editorial=true&sorting=date&count=${settings.batchSize}';
     if (lastId != null) path += '&lastId=$lastId';
     if (lastSortingValue != null) path += '&lastSortingValue=$lastSortingValue';
-    return _toFeedPage(await _get(path, settings));
+    return _toFeedPage(await _get(path, settings, useDevWebProxy: true));
   }
 
   // --- Comments of an entry (v2.10) ---
